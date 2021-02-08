@@ -137,10 +137,10 @@ def plot_images(images, targets, paths=None, fname='images.jpg', names=None, max
         mosaic[block_y:block_y + h, block_x:block_x + w, :] = img
         if len(targets) > 0:
             image_targets = targets[targets[:, 0] == i]
-            boxes = xywh2xyxy(image_targets[:, 2:6]).T
-            classes = image_targets[:, 1].astype('int')
-            labels = image_targets.shape[1] == 6  # labels if no conf column
-            conf = None if labels else image_targets[:, 6]  # check for confidence presence (label vs pred)
+            boxes = xywh2xyxy(image_targets[:, 1:5]).T
+            #classes = image_targets[:, 1].astype('int')
+            labels = image_targets.shape[1] == 5  # labels if no conf column
+            conf = None if labels else image_targets[:, 5]  # check for confidence presence (label vs pred)
 
             if boxes.shape[1]:
                 if boxes.max() <= 1.01:  # if normalized with tolerance 0.01
@@ -151,12 +151,12 @@ def plot_images(images, targets, paths=None, fname='images.jpg', names=None, max
             boxes[[0, 2]] += block_x
             boxes[[1, 3]] += block_y
             for j, box in enumerate(boxes.T):
-                cls = int(classes[j])
-                color = colors[cls % len(colors)]
-                cls = names[cls] if names else cls
+                #cls = int(classes[j])
+                color = colors[random.randint(0, 9)]
+                #cls = names[cls] if names else cls
                 if labels or conf[j] > 0.25:  # 0.25 conf thresh
-                    label = '%s' % cls if labels else '%s %.1f' % (cls, conf[j])
-                    plot_one_box(box, mosaic, label=label, color=color, line_thickness=tl)
+                    #label = '%s' % cls if labels else '%s %.1f' % (cls, conf[j])
+                    plot_one_box(box, mosaic, color=color, line_thickness=tl)
 
         # Draw image filename labels
         if paths:
@@ -281,7 +281,7 @@ def plot_labels(labels, save_dir=Path(''), loggers=None):
     # rectangles
     labels[:, 0:2] = 0.5  # center
     labels = xywh2xyxy(labels) * 2000
-    print(labels)
+    #print(labels)
     img = Image.fromarray(np.ones((2000, 2000, 3), dtype=np.uint8) * 255)
     for box in labels[:1000]:
         ImageDraw.Draw(img).rectangle(box, width=1, outline=colors[random.randint(0, 9)])  # plot
