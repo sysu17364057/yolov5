@@ -372,6 +372,7 @@ class LoadImagesAndLabels(Dataset):  # for training/testing
 
         # Check cache
         self.label_files = img2label_paths(self.img_files)  # labels
+        
         cache_path = (p if p.is_file() else Path(self.label_files[0]).parent).with_suffix('.cache')  # cached labels
         if cache_path.is_file():
             cache = torch.load(cache_path)  # load
@@ -458,18 +459,19 @@ class LoadImagesAndLabels(Dataset):  # for training/testing
                 if os.path.isfile(lb_file):
                     nf += 1  # label found
                     with open(lb_file, 'r') as f:
-                        l = np.array([x.split() for x in f.read().strip().splitlines()], dtype=np.float32)  # labels
+                        l = np.array([x.split() for x in f.read().strip().splitlines()], dtype=np.float32)  # labels 
                     if len(l):
-                        assert l.shape[1] == 5, 'labels require 5 columns each'
+                        l = l[:,1:]
+                        assert l.shape[1] == 4, 'labels require 5 columns each'
                         assert (l >= 0).all(), 'negative labels'
                         assert (l[:, 1:] <= 1).all(), 'non-normalized or out of bounds coordinate labels'
                         assert np.unique(l, axis=0).shape[0] == l.shape[0], 'duplicate labels'
                     else:
                         ne += 1  # label empty
-                        l = np.zeros((0, 5), dtype=np.float32)
+                        l = np.zeros((0, 4), dtype=np.float32)
                 else:
                     nm += 1  # label missing
-                    l = np.zeros((0, 5), dtype=np.float32)
+                    l = np.zeros((0, 4), dtype=np.float32)
                 x[im_file] = [l, shape]
             except Exception as e:
                 nc += 1
@@ -524,7 +526,7 @@ class LoadImagesAndLabels(Dataset):  # for training/testing
 
             labels = self.labels[index].copy()
             if labels.size:  # normalized xywh to pixel xyxy format
-                labels[:, 1:] = xywhn2xyxy(labels[:, 1:], ratio[0] * w, ratio[1] * h, padw=pad[0], padh=pad[1])
+                labels = xywhn2xyxy(labels, ratio[0] * w, ratio[1] * h, padw=pad[0], padh=pad[1])
 
         if self.augment:
             # Augment imagespace
@@ -545,24 +547,24 @@ class LoadImagesAndLabels(Dataset):  # for training/testing
 
         nL = len(labels)  # number of labels
         if nL:
-            labels[:, 1:5] = xyxy2xywh(labels[:, 1:5])  # convert xyxy to xywh
-            labels[:, [2, 4]] /= img.shape[0]  # normalized height 0-1
-            labels[:, [1, 3]] /= img.shape[1]  # normalized width 0-1
+            labels = xyxy2xywh(labels)  # convert xyxy to xywh
+            labels[:, [1, 3]] /= img.shape[0]  # normalized height 0-1
+            labels[:, [0, 2]] /= img.shape[1]  # normalized width 0-1
 
         if self.augment:
             # flip up-down
             if random.random() < hyp['flipud']:
                 img = np.flipud(img)
                 if nL:
-                    labels[:, 2] = 1 - labels[:, 2]
+                    labels[:, 1] = 1 - labels[:, 1]
 
             # flip left-right
             if random.random() < hyp['fliplr']:
                 img = np.fliplr(img)
                 if nL:
-                    labels[:, 1] = 1 - labels[:, 1]
+                    labels[:, 0] = 1 - labels[:, 0]
 
-        labels_out = torch.zeros((nL, 6))
+        labels_out = torch.zeros((nL, 5))
         if nL:
             labels_out[:, 1:] = torch.from_numpy(labels)
 
@@ -682,13 +684,13 @@ def load_mosaic(self, index):
         # Labels
         labels = self.labels[index].copy()
         if labels.size:
-            labels[:, 1:] = xywhn2xyxy(labels[:, 1:], w, h, padw, padh)  # normalized xywh to pixel xyxy format
+            labels = xywhn2xyxy(labels, w, h, padw, padh)  # normalized xywh to pixel xyxy format
         labels4.append(labels)
 
     # Concat/clip labels
     if len(labels4):
         labels4 = np.concatenate(labels4, 0)
-        np.clip(labels4[:, 1:], 0, 2 * s, out=labels4[:, 1:])  # use with random_perspective
+        np.clip(labels4, 0, 2 * s, out=labels4)  # use with random_perspective
         # img4, labels4 = replicate(img4, labels4)  # replicate
 
     # Augment
@@ -741,7 +743,7 @@ def load_mosaic9(self, index):
         # Labels
         labels = self.labels[index].copy()
         if labels.size:
-            labels[:, 1:] = xywhn2xyxy(labels[:, 1:], w, h, padx, pady)  # normalized xywh to pixel xyxy format
+            labels = xywhn2xyxy(labels, w, h, padx, pady)  # normalized xywh to pixel xyxy format
         labels9.append(labels)
 
         # Image
@@ -755,10 +757,10 @@ def load_mosaic9(self, index):
     # Concat/clip labels
     if len(labels9):
         labels9 = np.concatenate(labels9, 0)
-        labels9[:, [1, 3]] -= xc
-        labels9[:, [2, 4]] -= yc
+        labels9[:, [0, 2]] -= xc
+        labels9[:, [1, 3]] -= yc
 
-        np.clip(labels9[:, 1:], 0, 2 * s, out=labels9[:, 1:])  # use with random_perspective
+        np.clip(labels9, 0, 2 * s, out=labels9)  # use with random_perspective
         # img9, labels9 = replicate(img9, labels9)  # replicate
 
     # Augment
@@ -776,7 +778,7 @@ def load_mosaic9(self, index):
 def replicate(img, labels):
     # Replicate labels
     h, w = img.shape[:2]
-    boxes = labels[:, 1:].astype(int)
+    boxes = labels.astype(int)
     x1, y1, x2, y2 = boxes.T
     s = ((x2 - x1) + (y2 - y1)) / 2  # side length (pixels)
     for i in s.argsort()[:round(s.size * 0.5)]:  # smallest indices
@@ -877,7 +879,7 @@ def random_perspective(img, targets=(), degrees=10, translate=.1, scale=.1, shea
     if n:
         # warp points
         xy = np.ones((n * 4, 3))
-        xy[:, :2] = targets[:, [1, 2, 3, 4, 1, 4, 3, 2]].reshape(n * 4, 2)  # x1y1, x2y2, x1y2, x2y1
+        xy[:, :2] = targets[:, [0, 1, 2, 3, 0, 3, 2, 1]].reshape(n * 4, 2)  # x1y1, x2y2, x1y2, x2y1
         xy = xy @ M.T  # transform
         if perspective:
             xy = (xy[:, :2] / xy[:, 2:3]).reshape(n, 8)  # rescale
@@ -903,9 +905,9 @@ def random_perspective(img, targets=(), degrees=10, translate=.1, scale=.1, shea
         xy[:, [1, 3]] = xy[:, [1, 3]].clip(0, height)
 
         # filter candidates
-        i = box_candidates(box1=targets[:, 1:5].T * s, box2=xy.T)
+        i = box_candidates(box1=targets.T * s, box2=xy.T)
         targets = targets[i]
-        targets[:, 1:5] = xy[i]
+        targets = xy[i]
 
     return img, targets
 
@@ -958,7 +960,7 @@ def cutout(image, labels):
         # return unobscured labels
         if len(labels) and s > 0.03:
             box = np.array([xmin, ymin, xmax, ymax], dtype=np.float32)
-            ioa = bbox_ioa(box, labels[:, 1:5])  # intersection over area
+            ioa = bbox_ioa(box, labels)  # intersection over area
             labels = labels[ioa < 0.60]  # remove >60% obscured labels
 
     return labels

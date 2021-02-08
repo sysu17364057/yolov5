@@ -258,8 +258,10 @@ def plot_study_txt(path='', x=None):  # from utils.plots import *; plot_study_tx
 def plot_labels(labels, save_dir=Path(''), loggers=None):
     # plot dataset labels
     print('Plotting labels... ')
-    c, b = labels[:, 0], labels[:, 1:].transpose()  # classes, boxes
-    nc = int(c.max() + 1)  # number of classes
+    #c, b = labels[:, 0], labels[:, 1:].transpose()  # classes, boxes
+    b = labels.transpose()  # boxes
+    # print(b)
+    # nc = int(c.max() + 1)  # number of classes
     colors = color_list()
     x = pd.DataFrame(b.transpose(), columns=['x', 'y', 'width', 'height'])
 
@@ -271,17 +273,18 @@ def plot_labels(labels, save_dir=Path(''), loggers=None):
     # matplotlib labels
     matplotlib.use('svg')  # faster
     ax = plt.subplots(2, 2, figsize=(8, 8), tight_layout=True)[1].ravel()
-    ax[0].hist(c, bins=np.linspace(0, nc, nc + 1) - 0.5, rwidth=0.8)
-    ax[0].set_xlabel('classes')
+    # ax[0].hist(c, bins=np.linspace(0, nc, nc + 1) - 0.5, rwidth=0.8)
+    # ax[0].set_xlabel('classes')
     sns.histplot(x, x='x', y='y', ax=ax[2], bins=50, pmax=0.9)
     sns.histplot(x, x='width', y='height', ax=ax[3], bins=50, pmax=0.9)
 
     # rectangles
-    labels[:, 1:3] = 0.5  # center
-    labels[:, 1:] = xywh2xyxy(labels[:, 1:]) * 2000
+    labels[:, 0:2] = 0.5  # center
+    labels = xywh2xyxy(labels) * 2000
+    print(labels)
     img = Image.fromarray(np.ones((2000, 2000, 3), dtype=np.uint8) * 255)
-    for cls, *box in labels[:1000]:
-        ImageDraw.Draw(img).rectangle(box, width=1, outline=colors[int(cls) % 10])  # plot
+    for box in labels[:1000]:
+        ImageDraw.Draw(img).rectangle(box, width=1, outline=colors[random.randint(0, 9)])  # plot
     ax[1].imshow(img)
     ax[1].axis('off')
 
